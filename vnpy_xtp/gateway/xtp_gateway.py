@@ -29,6 +29,10 @@ from vnpy.trader.utility import get_folder_path, round_to, ZoneInfo
 
 from ..api import MdApi, TdApi
 
+from vnpy.trader.database import stock_meta_repository
+
+
+
 
 # 交易所映射
 MARKET_XTP2VT: Dict[int, Exchange] = {
@@ -252,7 +256,7 @@ class XtpGateway(BaseGateway):
     def init_query(self) -> None:
         """初始化查询任务"""
         self.count: int = 0
-        self.query_functions: list = [self.query_account, self.query_position]
+        self.query_functions: list = [self.query_account, self.query_position,self.q]
         self.event_engine.register(EVENT_TIMER, self.process_timer_event)
 
     def write_error(self, msg: str, error: dict) -> None:
@@ -757,6 +761,7 @@ class XtpTdApi(TdApi):
             self.login_status = True
             msg: str = f"交易服务器登录成功, 会话编号：{self.session_id}"
             self.init()
+            self.init_contract_data()
         else:
             error: dict = self.getApiLastError()
             msg: str = f"交易服务器登录失败，原因：{error['error_msg']}"
@@ -860,6 +865,11 @@ class XtpTdApi(TdApi):
         if self.margin_trading:
             self.reqid += 1
             self.queryCreditDebtInfo(self.session_id, self.reqid)
+
+    def init_contract_data(self):
+        contract_list =  stock_meta_repository.get_all_contracts()
+        for contrat in contract_list:
+            symbol_contract_map[contrat.vt_symbol] = contrat
 
 
 def get_option_index(strike_price: float, exchange_instrument_id: str) -> str:
