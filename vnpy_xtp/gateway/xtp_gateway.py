@@ -1,7 +1,7 @@
 from typing import Any, Dict, List
 from datetime import datetime
 from copy import copy
-
+from vnpy.trader.database import stock_meta_repository
 from vnpy.event import EventEngine
 from vnpy.trader.event import EVENT_TIMER
 from vnpy.trader.constant import (
@@ -28,10 +28,6 @@ from vnpy.trader.object import (
 from vnpy.trader.utility import get_folder_path, round_to, ZoneInfo
 
 from ..api import MdApi, TdApi
-
-from vnpy.trader.database import stock_meta_repository
-
-
 
 
 # 交易所映射
@@ -200,23 +196,26 @@ class XtpGateway(BaseGateway):
         userid: str = setting["账号"]
         password: str = setting["密码"]
         client_id: int = int(setting["客户号"])
-        quote_ip: str = setting["行情地址"]
-        quote_port: int = int(setting["行情端口"])
-        trader_ip: str = setting["交易地址"]
-        trader_port: int = int(setting["交易端口"])
+        quote_ip: str = setting.get("行情地址")
+
+        trader_ip: str = setting.get("交易地址")
+
         quote_protocol: str = setting["行情协议"]
         log_level: int = LOGLEVEL_VT2XTP[setting["日志级别"]]
         software_key: str = setting["授权码"]
-
-        self.md_api.connect(
-            userid, password, client_id, quote_ip,
-            quote_port, quote_protocol, log_level
-        )
-        self.td_api.connect(
-            userid, password, client_id, trader_ip,
-            trader_port, software_key, log_level
-        )
-        self.init_query()
+        if quote_ip is not None:
+            quote_port: int = int(setting.get("行情端口"))
+            self.md_api.connect(
+                userid, password, client_id, quote_ip,
+                quote_port, quote_protocol, log_level
+            )
+        if trader_ip is not None:
+            trader_port: int = int(setting.get("交易端口"))
+            self.td_api.connect(
+                userid, password, client_id, trader_ip,
+                trader_port, software_key, log_level
+            )
+            self.init_query()
 
     def close(self) -> None:
         """关闭接口"""
@@ -256,7 +255,7 @@ class XtpGateway(BaseGateway):
     def init_query(self) -> None:
         """初始化查询任务"""
         self.count: int = 0
-        self.query_functions: list = [self.query_account, self.query_position,self.q]
+        self.query_functions: list = [self.query_account, self.query_position]
         self.event_engine.register(EVENT_TIMER, self.process_timer_event)
 
     def write_error(self, msg: str, error: dict) -> None:
@@ -503,7 +502,8 @@ class XtpTdApi(TdApi):
     def onOrderEvent(self, data: dict, error: dict, session: int) -> None:
         """委托状态更新"""
         if error["error_id"]:
-            self.gateway.write_error("交易委托失败", error)
+            self.gateway.write_error("交易委托失败了！！", error)
+            self.gateway.write_log(f"交易委托失败了2{data}")
 
         symbol: str = data["ticker"]
         if len(symbol) == 8:
@@ -545,7 +545,6 @@ class XtpTdApi(TdApi):
             dt: datetime = datetime.strptime(timestamp, "%Y%m%d%H%M%S%f")
             dt: datetime = dt.replace(tzinfo=CHINA_TZ)
             order.datetime = dt
-
         self.gateway.on_order(copy(order))
 
     def onTradeEvent(self, data: dict, session: int) -> None:
@@ -867,10 +866,9 @@ class XtpTdApi(TdApi):
             self.queryCreditDebtInfo(self.session_id, self.reqid)
 
     def init_contract_data(self):
-        contract_list =  stock_meta_repository.get_all_contracts()
+        contract_list = stock_meta_repository.get_all_contracts()
         for contrat in contract_list:
             symbol_contract_map[contrat.vt_symbol] = contrat
-
 
 def get_option_index(strike_price: float, exchange_instrument_id: str) -> str:
     """获取期权索引"""
