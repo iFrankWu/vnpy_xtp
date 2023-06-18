@@ -25,7 +25,8 @@ from vnpy.trader.object import (
     PositionData,
     AccountData
 )
-from vnpy.trader.utility import get_folder_path, round_to, ZoneInfo
+from vnpy.trader.utility import get_folder_path, ZoneInfo
+from vnpy.trader.vt_util import round_to
 
 from ..api import MdApi, TdApi
 
