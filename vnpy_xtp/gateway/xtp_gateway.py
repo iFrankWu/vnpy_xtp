@@ -1,5 +1,5 @@
 from typing import Any, Dict, List
-from datetime import datetime
+from datetime import datetime, time
 from copy import copy
 from vnpy.trader.database import stock_meta_repository
 from vnpy.event import EventEngine
@@ -160,7 +160,21 @@ CHINA_TZ = ZoneInfo("Asia/Shanghai")       # 中国时区
 
 # 合约数据全局缓存字典
 symbol_contract_map: Dict[str, ContractData] = {}
+# Chinese futures market trading period (day/night)
+AM_START = time(9, 30)
+AM_END = time(11, 30)
 
+PM_START = time(13, 0)
+PM_END = time(15, 0)
+
+
+def is_curr_trade_time() -> datetime:
+    current_time = datetime.now().time()
+    trading = False
+    if ((AM_START <= current_time <= AM_END)
+            or (PM_START <= current_time <= PM_END)):
+        trading = True
+    return trading
 
 class XtpGateway(BaseGateway):
     """
@@ -243,6 +257,9 @@ class XtpGateway(BaseGateway):
 
     def process_timer_event(self, event) -> None:
         """定时事件处理"""
+        if is_curr_trade_time():
+            #如果在交易期间就别执行了 影响性能
+            return
         self.count += 1
         if self.count < 2:
             return
