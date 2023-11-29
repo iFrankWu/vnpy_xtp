@@ -1,3 +1,4 @@
+import logging
 from typing import Any, Dict, List
 from datetime import datetime, time
 from copy import copy
@@ -330,6 +331,8 @@ class XtpMdApi(MdApi):
         timestamp: str = str(data["data_time"])
         dt: datetime = datetime.strptime(timestamp, "%Y%m%d%H%M%S%f")
         dt: datetime = dt.replace(tzinfo=CHINA_TZ)
+
+        logging.getLogger().info(f'received tick:{data["ticker"]},{dt},{data["open_price"]},{data["high_price"]},{data["low_price"]},{data["last_price"]}')
 
         tick: TickData = TickData(
             symbol=data["ticker"],
