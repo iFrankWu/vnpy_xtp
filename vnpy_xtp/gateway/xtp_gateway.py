@@ -1,4 +1,5 @@
 import logging
+import traceback
 from typing import Any, Dict, List
 from datetime import datetime, time
 from copy import copy
@@ -29,7 +30,6 @@ from vnpy.trader.object import (
 from vnpy.trader.utility import get_folder_path, round_to, ZoneInfo
 
 from ..api import MdApi, TdApi
-
 
 # 交易所映射
 MARKET_XTP2VT: Dict[int, Exchange] = {
@@ -157,7 +157,7 @@ LOGLEVEL_VT2XTP = {
 }
 
 # 其他常量
-CHINA_TZ = ZoneInfo("Asia/Shanghai")       # 中国时区
+CHINA_TZ = ZoneInfo("Asia/Shanghai")  # 中国时区
 
 # 合约数据全局缓存字典
 symbol_contract_map: Dict[str, ContractData] = {}
@@ -176,6 +176,7 @@ def is_curr_trade_time() -> datetime:
             or (PM_START <= current_time <= PM_END)):
         trading = True
     return trading
+
 
 class XtpGateway(BaseGateway):
     """
@@ -259,7 +260,7 @@ class XtpGateway(BaseGateway):
     def process_timer_event(self, event) -> None:
         """定时事件处理"""
         if is_curr_trade_time():
-            #如果在交易期间就别执行了 影响性能
+            # 如果在交易期间就别执行了 影响性能
             return
         self.count += 1
         if self.count < 2:
@@ -306,6 +307,8 @@ class XtpMdApi(MdApi):
 
         self.sse_inited: bool = False
         self.szse_inited: bool = False
+        # 记录当前进程点订阅了哪些标的 以便在连接断开重连的时候 重新订阅
+        self.subscribe_request_list: set[SubscribeRequest] = []
 
     def onDisconnected(self, reason: int) -> None:
         """服务器连接断开回报"""
@@ -332,7 +335,8 @@ class XtpMdApi(MdApi):
         dt: datetime = datetime.strptime(timestamp, "%Y%m%d%H%M%S%f")
         dt: datetime = dt.replace(tzinfo=CHINA_TZ)
 
-        logging.getLogger().info(f'received tick:{data["ticker"]},{dt},{data["open_price"]},{data["high_price"]},{data["low_price"]},{data["last_price"]}')
+        logging.getLogger().info(
+            f'received tick:{data["ticker"]},{dt},{data["open_price"]},{data["high_price"]},{data["low_price"]},{data["last_price"]}')
 
         tick: TickData = TickData(
             symbol=data["ticker"],
@@ -352,8 +356,10 @@ class XtpMdApi(MdApi):
 
         tick.bid_price_1, tick.bid_price_2, tick.bid_price_3, tick.bid_price_4, tick.bid_price_5 = data["bid"][0:5]
         tick.ask_price_1, tick.ask_price_2, tick.ask_price_3, tick.ask_price_4, tick.ask_price_5 = data["ask"][0:5]
-        tick.bid_volume_1, tick.bid_volume_2, tick.bid_volume_3, tick.bid_volume_4, tick.bid_volume_5 = data["bid_qty"][0:5]
-        tick.ask_volume_1, tick.ask_volume_2, tick.ask_volume_3, tick.ask_volume_4, tick.ask_volume_5 = data["ask_qty"][0:5]
+        tick.bid_volume_1, tick.bid_volume_2, tick.bid_volume_3, tick.bid_volume_4, tick.bid_volume_5 = data["bid_qty"][
+                                                                                                        0:5]
+        tick.ask_volume_1, tick.ask_volume_2, tick.ask_volume_3, tick.ask_volume_4, tick.ask_volume_5 = data["ask_qty"][
+                                                                                                        0:5]
 
         # 基于合约的最小价格跳动，对浮点数价格进行四舍五入
         contract: ContractData = symbol_contract_map.get(tick.vt_symbol, None)
@@ -413,14 +419,14 @@ class XtpMdApi(MdApi):
             #     self.gateway.td_api.query_option_info()
 
     def connect(
-        self,
-        userid: str,
-        password: str,
-        client_id: int,
-        server_ip: str,
-        server_port: int,
-        quote_protocol: int,
-        log_level: int
+            self,
+            userid: str,
+            password: str,
+            client_id: int,
+            server_ip: str,
+            server_port: int,
+            quote_protocol: int,
+            log_level: int
     ) -> None:
         """连接服务器"""
         self.userid = userid
@@ -454,6 +460,7 @@ class XtpMdApi(MdApi):
             msg: str = "行情服务器登录成功"
             self.query_contract()
             self.init()
+            self.re_subscribe()
         else:
             error: dict = self.getApiLastError()
             msg: str = f"行情服务器登录失败，原因：{error['error_msg']}"
@@ -470,6 +477,19 @@ class XtpMdApi(MdApi):
         if self.login_status:
             xtp_exchange: int = EXCHANGE_VT2XTP.get(req.exchange, "")
             self.subscribeMarketData(req.symbol, 1, xtp_exchange)
+            self.subscribe_request_list.append(req)
+
+    def re_subscribe(self) -> None:
+        """重新订阅行情"""
+        try:
+            if self.subscribe_request_list is None or len(self.subscribe_request_list) == 0:
+                return
+            for req in self.subscribe_request_list:
+                self.subscribe(req)
+                logging.getLogger().info(f'重新订阅行情:{req.vt_symbol}')
+        except:
+            logging.getLogger("error").error(
+                f"重新订阅行情出错 client_id:{self.client_id},session_id:{self.session_id} {traceback.format_exc()}")
 
     def query_contract(self) -> None:
         """查询合约信息"""
@@ -615,12 +635,12 @@ class XtpTdApi(TdApi):
         self.gateway.write_error("撤单失败", error)
 
     def onQueryPosition(
-        self,
-        data: dict,
-        error: dict,
-        request: int,
-        last: bool,
-        session: int
+            self,
+            data: dict,
+            error: dict,
+            request: int,
+            last: bool,
+            session: int
     ) -> None:
         """查询持仓回报"""
         if data["market"] == 0:
@@ -640,12 +660,12 @@ class XtpTdApi(TdApi):
         self.gateway.on_position(position)
 
     def onQueryAsset(
-        self,
-        data: dict,
-        error: dict,
-        request: int,
-        last: bool,
-        session: int
+            self,
+            data: dict,
+            error: dict,
+            request: int,
+            last: bool,
+            session: int
     ) -> None:
         """查询资金回报"""
         account: AccountData = AccountData(
@@ -683,9 +703,9 @@ class XtpTdApi(TdApi):
 
         contract.option_portfolio = data["underlying_security_id"] + "_O"
         contract.option_underlying = (
-            data["underlying_security_id"]
-            + "-"
-            + str(data["delivery_month"])
+                data["underlying_security_id"]
+                + "-"
+                + str(data["delivery_month"])
         )
         contract.option_type = OPTIONTYPE_XTP2VT.get(data["call_or_put"], None)
 
@@ -704,12 +724,12 @@ class XtpTdApi(TdApi):
             self.gateway.write_log("期权信息查询成功")
 
     def onQueryCreditDebtInfo(
-        self,
-        data: dict,
-        error: dict,
-        request: int,
-        last: bool,
-        session: int
+            self,
+            data: dict,
+            error: dict,
+            request: int,
+            last: bool,
+            session: int
     ) -> None:
         """查询两融持仓回报"""
         if data["debt_type"] == 1:
@@ -735,14 +755,14 @@ class XtpTdApi(TdApi):
             self.short_positions.clear()
 
     def connect(
-        self,
-        userid: str,
-        password: str,
-        client_id: int,
-        server_ip: str,
-        server_port: int,
-        software_key: str,
-        log_level: int
+            self,
+            userid: str,
+            password: str,
+            client_id: int,
+            server_ip: str,
+            server_port: int,
+            software_key: str,
+            log_level: int
     ) -> None:
         """连接服务器"""
 
@@ -889,6 +909,7 @@ class XtpTdApi(TdApi):
         contract_list = stock_meta_repository.get_all_contracts()
         for contrat in contract_list:
             symbol_contract_map[contrat.vt_symbol] = contrat
+
 
 def get_option_index(strike_price: float, exchange_instrument_id: str) -> str:
     """获取期权索引"""
