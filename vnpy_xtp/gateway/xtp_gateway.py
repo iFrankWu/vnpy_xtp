@@ -1,5 +1,6 @@
 import logging
 import traceback
+from time import sleep
 from typing import Any, Dict, List
 from datetime import datetime, time
 from copy import copy
@@ -308,14 +309,14 @@ class XtpMdApi(MdApi):
         self.sse_inited: bool = False
         self.szse_inited: bool = False
         # 记录当前进程点订阅了哪些标的 以便在连接断开重连的时候 重新订阅
-        self.subscribe_request_list: set[SubscribeRequest] = []
+        self.subscribe_request_list = set()
 
     def onDisconnected(self, reason: int) -> None:
         """服务器连接断开回报"""
         self.connect_status = False
         self.login_status = False
         self.gateway.write_log(f"行情服务器连接断开, 原因{reason}")
-
+        sleep(1)
         self.login_server()
 
     def onError(self, error: dict) -> None:
@@ -477,7 +478,8 @@ class XtpMdApi(MdApi):
         if self.login_status:
             xtp_exchange: int = EXCHANGE_VT2XTP.get(req.exchange, "")
             self.subscribeMarketData(req.symbol, 1, xtp_exchange)
-            self.subscribe_request_list.append(req)
+            ele = req.symbol,req.exchange
+            self.subscribe_request_list.add(ele)
 
     def re_subscribe(self) -> None:
         """重新订阅行情"""
@@ -485,8 +487,9 @@ class XtpMdApi(MdApi):
             if self.subscribe_request_list is None or len(self.subscribe_request_list) == 0:
                 return
             for req in self.subscribe_request_list:
-                self.subscribe(req)
-                logging.getLogger().info(f'重新订阅行情:{req.vt_symbol}')
+                sub_req = SubscribeRequest(req[0],req[1])
+                self.subscribe(sub_req)
+                logging.getLogger().info(f'重新订阅行情:{sub_req.vt_symbol} {len(self.subscribe_request_list)}')
         except:
             logging.getLogger("error").error(
                 f"重新订阅行情出错 client_id:{self.client_id},session_id:{self.session_id} {traceback.format_exc()}")
