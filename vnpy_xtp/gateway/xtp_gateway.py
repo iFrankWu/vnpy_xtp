@@ -478,7 +478,8 @@ class XtpMdApi(MdApi):
         if self.login_status:
             xtp_exchange: int = EXCHANGE_VT2XTP.get(req.exchange, "")
             self.subscribeMarketData(req.symbol, 1, xtp_exchange)
-            ele = req.symbol,req.exchange
+            ele = req.symbol, req.exchange
+            # 仅在系统初始化的时候 添加值 其他时候不添加
             self.subscribe_request_list.add(ele)
 
     def re_subscribe(self) -> None:
@@ -486,10 +487,29 @@ class XtpMdApi(MdApi):
         try:
             if self.subscribe_request_list is None or len(self.subscribe_request_list) == 0:
                 return
-            for req in self.subscribe_request_list:
-                sub_req = SubscribeRequest(req[0],req[1])
-                self.subscribe(sub_req)
-                logging.getLogger().info(f'重新订阅行情:{sub_req.vt_symbol} {len(self.subscribe_request_list)}')
+            if not self.login_status:
+                logging.getLogger().info(
+                    f'登录状态非法 不能重新订阅:clientId：{self.client_id} size：{len(self.subscribe_request_list)}')
+                return
+
+            sub_list_clone = self.subscribe_request_list
+            # 1. 重新订阅之前 先取消订阅
+            for req in sub_list_clone:
+                symbol = req[0]
+                exchange = req[1]
+
+                xtp_exchange: int = EXCHANGE_VT2XTP.get(exchange, "")
+                self.unSubscribeMarketData(symbol, 1, xtp_exchange)
+                logging.getLogger().info(
+                    f'重新订阅行情之前 先取消订阅:{symbol} client_id:{self.client_id}, size: {len(sub_list_clone)}')
+
+            # 2. 重新订阅
+            for req in sub_list_clone:
+                symbol = req[0]
+                exchange = req[1]
+                xtp_exchange: int = EXCHANGE_VT2XTP.get(exchange, "")
+                self.subscribeMarketData(symbol, 1, xtp_exchange)
+                logging.getLogger().info(f'重新订阅行情:{symbol} client_id:{self.client_id}, size:{len(sub_list_clone)}')
         except:
             logging.getLogger("error").error(
                 f"重新订阅行情出错 client_id:{self.client_id},session_id:{self.session_id} {traceback.format_exc()}")
