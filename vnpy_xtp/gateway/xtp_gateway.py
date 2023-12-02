@@ -5,6 +5,7 @@ from typing import Any, Dict, List
 from datetime import datetime, time
 from copy import copy
 from vnpy.trader.database import stock_meta_repository
+from vnpy.trader.database import sys_config_repository
 from vnpy.event import EventEngine
 from vnpy.trader.event import EVENT_TIMER
 from vnpy.trader.constant import (
@@ -189,6 +190,7 @@ class XtpGateway(BaseGateway):
         2、丢弃早期的tick，以减少tick队列的积压
         3、断开重连sleep 3秒后 再重连
         4、重连时 先取消之前订阅的标的 （这是因为经过实践重连时 xtp可能订阅全市场标的 此时双方系统都会处理不过来）
+        5、增加应急开关 re_auto_login_xtp，当设置为N时 则不会自动重连，默认自动重连
 
     """
 
@@ -326,19 +328,30 @@ class XtpMdApi(MdApi):
         self.connect_status = False
         self.login_status = False
         self.gateway.write_log(f"行情服务器连接断开, 原因{reason}")
+
+        sys_config = sys_config_repository.get_config_value("re_auto_login_xtp")
+        if sys_config is not None:
+            if "Y".lower() != sys_config.config_value.lower():
+                logging.getLogger().info(
+                    f'当前系统设置re_auto_login_xtp不为Y，为{sys_config.config_value.value}, 不自动重新订阅 clientId：{self.client_id} size：{len(self.subscribe_request_list)} {self.subscribe_request_list}')
+                return
+
         sleep(3)
         self.login_server()
 
     def onError(self, error: dict) -> None:
         """请求报错回报"""
         self.gateway.write_error("行情接口报错", error)
+        logging.getLogger("error").error(f'行情接口报错:error{error},client_id:{self.client_id}')
+
 
     def onSubMarketData(self, data: dict, error: dict, last: bool) -> None:
         """订阅行情回报"""
         if not error or not error["error_id"]:
             return
-
         self.gateway.write_error("行情订阅失败", error)
+        logging.getLogger("error").error(f'行情订阅失败 data:{data},error{error},client_id:{self.client_id}')
+
 
     def __is_sub_symbol(self,symbol):
         for sub_req in self.subscribe_request_list:
@@ -475,6 +488,8 @@ class XtpMdApi(MdApi):
         if not self.connect_status:
             path: str = str(get_folder_path(self.gateway_name.lower())).encode("GBK")
             self.createQuoteApi(self.client_id, path, log_level)
+            #超时时间设置为30s
+            self.setHeartBeatInterval(30)
             self.login_server()
         else:
             self.gateway.write_log("行情接口已登录，请勿重复操作")
@@ -513,6 +528,7 @@ class XtpMdApi(MdApi):
         if self.login_status:
             xtp_exchange: int = EXCHANGE_VT2XTP.get(req.exchange, "")
             self.subscribeMarketData(req.symbol, 1, xtp_exchange)
+            logging.getLogger().info(f'首次订阅行情:{req.symbol},xtp_exchange:{xtp_exchange},client_id:{self.client_id}')
             ele = req.symbol, req.exchange
             # 仅在系统初始化的时候 添加值 其他时候不添加
             self.subscribe_request_list.add(ele)
@@ -536,7 +552,7 @@ class XtpMdApi(MdApi):
                 xtp_exchange: int = EXCHANGE_VT2XTP.get(exchange, "")
                 self.unSubscribeMarketData(symbol, 1, xtp_exchange)
                 logging.getLogger().info(
-                    f'重新订阅行情之前 先取消订阅:{symbol} client_id:{self.client_id}, size: {len(sub_list_clone)}')
+                    f'重新订阅行情之前 先取消订阅:{symbol},xtp_exchange:{xtp_exchange}, client_id:{self.client_id}, size: {len(sub_list_clone)}')
 
             # 2. 重新订阅
             for req in sub_list_clone:
@@ -544,7 +560,7 @@ class XtpMdApi(MdApi):
                 exchange = req[1]
                 xtp_exchange: int = EXCHANGE_VT2XTP.get(exchange, "")
                 self.subscribeMarketData(symbol, 1, xtp_exchange)
-                logging.getLogger().info(f'重新订阅行情:{symbol} client_id:{self.client_id}, size:{len(sub_list_clone)}')
+                logging.getLogger().info(f'重新订阅行情:{symbol},xtp_exchange:{xtp_exchange}, client_id:{self.client_id}, size:{len(sub_list_clone)}')
         except:
             logging.getLogger("error").error(
                 f"重新订阅行情出错 client_id:{self.client_id},session_id:{self.session_id} {traceback.format_exc()}")
