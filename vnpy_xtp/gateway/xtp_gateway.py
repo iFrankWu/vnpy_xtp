@@ -28,7 +28,7 @@ from vnpy.trader.object import (
     PositionData,
     AccountData
 )
-from vnpy.trader.utility import get_folder_path, round_to, ZoneInfo
+from vnpy.trader.utility import get_folder_path, round_to, ZoneInfo, DateUtil
 
 from ..api import MdApi, TdApi
 
@@ -182,6 +182,14 @@ def is_curr_trade_time() -> datetime:
 class XtpGateway(BaseGateway):
     """
     VeighNa用于对接中泰XTP柜台的交易接口。
+
+    由于xtp升级系统 提高tcp tick的推送能力 会造成socket连接断开，从而导致tick接收失败。
+    因此在2023-12-02 进行以下升级：
+        1、当前进程仅处理自身订阅标的的tick，其他tick直接丢弃，不进入队列
+        2、丢弃早期的tick，以减少tick队列的积压
+        3、断开重连sleep 3秒后 再重连
+        4、重连时 先取消之前订阅的标的 （这是因为经过实践重连时 xtp可能订阅全市场标的 此时双方系统都会处理不过来）
+
     """
 
     default_name: str = "XTP"
@@ -310,13 +318,15 @@ class XtpMdApi(MdApi):
         self.szse_inited: bool = False
         # 记录当前进程点订阅了哪些标的 以便在连接断开重连的时候 重新订阅
         self.subscribe_request_list = set()
+        # vt_symbol -> last tick time 将已过期的tick 早早的丢弃 免得队列积压
+        self.last_tick_time : dict = {}
 
     def onDisconnected(self, reason: int) -> None:
         """服务器连接断开回报"""
         self.connect_status = False
         self.login_status = False
         self.gateway.write_log(f"行情服务器连接断开, 原因{reason}")
-        sleep(1)
+        sleep(3)
         self.login_server()
 
     def onError(self, error: dict) -> None:
@@ -330,14 +340,37 @@ class XtpMdApi(MdApi):
 
         self.gateway.write_error("行情订阅失败", error)
 
+    def __is_sub_symbol(self,symbol):
+        for sub_req in self.subscribe_request_list:
+            sub_symbol = sub_req[0]
+            if sub_symbol == symbol:
+                return True
+        return False
+
     def onDepthMarketData(self, data: dict) -> None:
         """行情推送回报"""
         timestamp: str = str(data["data_time"])
         dt: datetime = datetime.strptime(timestamp, "%Y%m%d%H%M%S%f")
         dt: datetime = dt.replace(tzinfo=CHINA_TZ)
 
+        symbol = data["ticker"]
+        exchange = EXCHANGE_XTP2VT[data["exchange_id"]]
+        vt_symbol = f"{symbol}.{exchange.value}"
+
+        last_tick_time = self.last_tick_time.get(vt_symbol)
+        if last_tick_time is not None:
+            if DateUtil.datetime_a_lt_b(dt,last_tick_time):
+                logging.getLogger().info(f'ignore received early tick:{vt_symbol},{dt}, already processed tick : {last_tick_time}')
+                return
+
+        if not self.__is_sub_symbol(data["ticker"]):
+           logging.getLogger("error").error(
+               f'received tick not our subscribed:{data["ticker"]},{dt},clientId:{self.client_id} {data["last_price"]},subscribed:{self.subscribe_request_list}')
+           return
+
         logging.getLogger().info(
-            f'received tick:{data["ticker"]},{dt},{data["open_price"]},{data["high_price"]},{data["low_price"]},{data["last_price"]}')
+           f'received tick:{data["ticker"]},{dt},{data["open_price"]},{data["high_price"]},{data["low_price"]},{data["last_price"]}')
+
 
         tick: TickData = TickData(
             symbol=data["ticker"],
@@ -388,6 +421,8 @@ class XtpMdApi(MdApi):
             tick.name = contract.name
 
         self.gateway.on_tick(tick)
+
+        self.last_tick_time[vt_symbol] = dt
 
     def onQueryAllTickers(self, data: dict, error: dict, last: bool) -> None:
         """查询合约回报"""
