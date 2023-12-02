@@ -323,20 +323,23 @@ class XtpMdApi(MdApi):
         # vt_symbol -> last tick time 将已过期的tick 早早的丢弃 免得队列积压
         self.last_tick_time : dict = {}
 
+        self.re_connect_times = 0
+
     def onDisconnected(self, reason: int) -> None:
         """服务器连接断开回报"""
         self.connect_status = False
         self.login_status = False
-        self.gateway.write_log(f"行情服务器连接断开, 原因{reason}")
-
-        sys_config = sys_config_repository.get_config_value("re_auto_login_xtp")
-        if sys_config is not None:
-            if "Y".lower() != sys_config.config_value.lower():
-                logging.getLogger().info(
-                    f'当前系统设置re_auto_login_xtp不为Y，为{sys_config.config_value.value}, 不自动重新订阅 clientId：{self.client_id} size：{len(self.subscribe_request_list)} {self.subscribe_request_list}')
-                return
+        self.gateway.write_log(f"行情服务器连接断开, 原因{reason} 已重连次数:{self.re_connect_times}")
+        if len(self.subscribe_request_list) > 0:
+            sys_config = sys_config_repository.get_config_value("re_auto_login_xtp")
+            if sys_config is not None:
+                if "Y".lower() != sys_config.config_value.lower():
+                    logging.getLogger().info(
+                        f'当前系统设置re_auto_login_xtp不为Y，为{sys_config.config_value}, 不自动重新订阅 clientId：{self.client_id} size：{len(self.subscribe_request_list)} {self.subscribe_request_list}')
+                    return
 
         sleep(3)
+        self.re_connect_times = self.re_connect_times + 1
         self.login_server()
 
     def onError(self, error: dict) -> None:
