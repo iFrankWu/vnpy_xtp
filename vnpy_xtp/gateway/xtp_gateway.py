@@ -359,7 +359,7 @@ class XtpMdApi(MdApi):
 
         last_tick_time = self.last_tick_time.get(vt_symbol)
         if last_tick_time is not None:
-            if DateUtil.datetime_a_lt_b(dt,last_tick_time):
+            if DateUtil.datetime_a_le_b(dt,last_tick_time):
                 logging.getLogger().info(f'ignore received early tick:{vt_symbol},{dt}, already processed tick : {last_tick_time}')
                 return
 
