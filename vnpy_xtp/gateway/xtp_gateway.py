@@ -500,7 +500,7 @@ class XtpMdApi(MdApi):
                 #如果连接的是UDP行情服务器，无论是否订阅，都是行情全接收后再本地Api筛选过滤
                 self.setUDPBufferSize(512)
                 # 设定是否输出异步日志 灰度期间打开 生成时关闭
-                self.setUDPSeqLogOutPutFlag(True)
+                # self.setUDPSeqLogOutPutFlag(True)
 
             self.login_server()
         else:
