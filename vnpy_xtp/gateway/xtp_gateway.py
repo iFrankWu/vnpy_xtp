@@ -192,6 +192,8 @@ class XtpGateway(BaseGateway):
         4、重连时 先取消之前订阅的标的 （这是因为经过实践重连时 xtp可能订阅全市场标的 此时双方系统都会处理不过来）
         5、增加应急开关 re_auto_login_xtp，当设置为N时 则不会自动重连，默认自动重连
         6、tcp连接超时时间设置为30s
+        7、增加记录重连次数
+        8、UDP模式下 重连不会重新订阅
     """
 
     default_name: str = "XTP"
