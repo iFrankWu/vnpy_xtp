@@ -191,7 +191,7 @@ class XtpGateway(BaseGateway):
         3、断开重连sleep 3秒后 再重连
         4、重连时 先取消之前订阅的标的 （这是因为经过实践重连时 xtp可能订阅全市场标的 此时双方系统都会处理不过来）
         5、增加应急开关 re_auto_login_xtp，当设置为N时 则不会自动重连，默认自动重连
-
+        6、tcp连接超时时间设置为30s
     """
 
     default_name: str = "XTP"
@@ -493,6 +493,13 @@ class XtpMdApi(MdApi):
             self.createQuoteApi(self.client_id, path, log_level)
             #超时时间设置为30s
             self.setHeartBeatInterval(30)
+
+            if quote_protocol == 'UDP':
+                #如果连接的是UDP行情服务器，无论是否订阅，都是行情全接收后再本地Api筛选过滤
+                self.setUDPBufferSize(512)
+                # 设定是否输出异步日志 灰度期间打开 生成时关闭
+                self.setUDPSeqLogOutPutFlag(True)
+
             self.login_server()
         else:
             self.gateway.write_log("行情接口已登录，请勿重复操作")
@@ -544,6 +551,11 @@ class XtpMdApi(MdApi):
             if not self.login_status:
                 logging.getLogger().info(
                     f'登录状态非法 不能重新订阅:clientId：{self.client_id} size：{len(self.subscribe_request_list)}')
+                return
+            #"TCP": 1, "UDP": 2
+            if self.protocol == 2:
+                logging.getLogger().info(
+                    f'当前协议为UDP {self.protocol} (tcp:1,udp:2) 不需要重新订阅,clientId：{self.client_id} size：{len(self.subscribe_request_list)}')
                 return
 
             sub_list_clone = self.subscribe_request_list
