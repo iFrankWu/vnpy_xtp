@@ -331,7 +331,7 @@ class XtpMdApi(MdApi):
         """服务器连接断开回报"""
         self.connect_status = False
         self.login_status = False
-        self.gateway.write_log(f"行情服务器连接断开, 原因{reason} 已重连次数:{self.re_connect_times}")
+        self.gateway.write_log(f"行情服务器连接断开, 原因{reason} clientId:{self.client_id} 已重连次数:{self.re_connect_times}")
         if len(self.subscribe_request_list) > 0:
             sys_config = sys_config_repository.get_config_value("re_auto_login_xtp")
             if sys_config is not None:
