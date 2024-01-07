@@ -297,6 +297,10 @@ class XtpGateway(BaseGateway):
         msg: str = f"{msg}，代码：{error_id}，信息：{error_msg}"
         self.write_log(msg)
 
+    def query_last_price(self,symbol,exchange:Exchange):
+        cnt = 1
+        self.md_api.query_last_price(symbol,exchange,cnt)
+
 
 class XtpMdApi(MdApi):
 
@@ -544,6 +548,17 @@ class XtpMdApi(MdApi):
             ele = req.symbol, req.exchange
             # 仅在系统初始化的时候 添加值 其他时候不添加
             self.subscribe_request_list.add(ele)
+
+    def query_last_price(self,symbol,exchange,cnt):
+        xtp_exchange: int = EXCHANGE_VT2XTP.get(exchange, "")
+        self.queryTickersPriceInfo(symbol,cnt,xtp_exchange)
+
+    def onQueryTickersPriceInfo(self, data: dict, error, is_last:bool):
+        symbol = data["ticker"]
+        exchange = EXCHANGE_XTP2VT[data["exchange_id"]]
+        # vt_symbol = f"{symbol}.{exchange.value}"
+        logging.getLogger().info(
+            f'query last price:{data["ticker"]},{data["open_price"]},{data["high_price"]},{data["low_price"]},{data["last_price"]}')
 
     def re_subscribe(self) -> None:
         """重新订阅行情"""
