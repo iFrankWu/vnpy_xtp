@@ -551,14 +551,25 @@ class XtpMdApi(MdApi):
 
     def query_last_price(self,symbol,exchange,cnt):
         xtp_exchange: int = EXCHANGE_VT2XTP.get(exchange, "")
-        self.queryTickersPriceInfo(symbol,cnt,xtp_exchange)
+        return self.queryTickersPriceInfo(symbol,cnt,xtp_exchange)
 
-    def onQueryTickersPriceInfo(self, data: dict, error, is_last:bool):
-        symbol = data["ticker"]
-        exchange = EXCHANGE_XTP2VT[data["exchange_id"]]
+
+    def onQueryTickersPriceInfo(self, data: dict, error:dict, is_last:bool) -> None:
+        # symbol = data["ticker"]
+        # exchange = EXCHANGE_XTP2VT[data["exchange_id"]]
         # vt_symbol = f"{symbol}.{exchange.value}"
-        logging.getLogger().info(
-            f'query last price:{data["ticker"]},{data["open_price"]},{data["high_price"]},{data["low_price"]},{data["last_price"]}')
+        logging.getLogger().info(f'response onQueryTickersPriceInfo :{data} {is_last}')
+
+    def query_all_last_price(self,  exchange):
+        xtp_exchange: int = EXCHANGE_VT2XTP.get(exchange, "")
+        self.queryAllTickersFullInfo(xtp_exchange)
+
+    def onQueryAllTickersPriceInfo(self, data: dict, error:dict, is_last:bool) -> None:
+        logging.getLogger().info(f'response onQueryAllTickersPriceInfo:{data} {is_last}')
+
+
+    # def onQueryAllTickersFullInfo(self, data: dict, error:dict, is_last:bool) -> None:
+    #     logging.getLogger().info(f'response onQueryAllTickersFullInfo:{data}')
 
     def re_subscribe(self) -> None:
         """重新订阅行情"""
