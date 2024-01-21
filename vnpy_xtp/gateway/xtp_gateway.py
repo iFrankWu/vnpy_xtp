@@ -266,6 +266,10 @@ class XtpGateway(BaseGateway):
         """查询资金"""
         self.td_api.query_account()
 
+    def query_credit_asset(self) -> None:
+        """查询信用资产"""
+        self.td_api.query_credit_asset()
+
     def query_position(self) -> None:
         """查询持仓"""
         self.td_api.query_position()
@@ -287,7 +291,11 @@ class XtpGateway(BaseGateway):
     def init_query(self) -> None:
         """初始化查询任务"""
         self.count: int = 0
-        self.query_functions: list = [self.query_account, self.query_position]
+        self.query_account()
+        self.query_credit_asset()
+
+        # self.query_functions: list = [self.query_account, self.query_position]
+        self.query_functions: list = [ self.query_position]
         self.event_engine.register(EVENT_TIMER, self.process_timer_event)
 
     def write_error(self, msg: str, error: dict) -> None:
@@ -743,7 +751,9 @@ class XtpTdApi(TdApi):
             self.gateway.write_log(f"成交找不到对应委托{trade.orderid}")
 
         self.gateway.on_trade(trade)
-
+        # 每次成交时 触发资产更新
+        self.query_account()
+        self.query_credit_asset()
     def onCancelOrderError(self, data: dict, error: dict, session: int) -> None:
         """撤单报错"""
         if not error or not error["error_id"]:
@@ -789,9 +799,20 @@ class XtpTdApi(TdApi):
             accountid=self.userid,
             balance=round(data["total_asset"], 2),
             frozen=round(data["withholding_amount"], 2),
-            gateway_name=self.gateway_name
+            total_asset= round(data["total_asset"], 2),
+            buying_power = round(data["buying_power"], 2),
+            withholding_amount = round(data["withholding_amount"], 2),
+            fund_buy_amount = round(data["fund_buy_amount"], 2),
+            all_asset = 0,
+            all_debt = 0,
+            guaranty = 0,
+            maintenance_ratio = 0,
+            line_of_credit = 0,
+            gateway_name=self.gateway_name,
+            asset_type='CASH'
         )
         account.available = round(data["buying_power"], 2)
+
 
         if data["account_type"] == 1:
             self.margin_trading = True
@@ -800,6 +821,28 @@ class XtpTdApi(TdApi):
             account.frozen = round(account.frozen, 2)
             self.option_trading = True
 
+        self.gateway.on_account(account)
+
+    def OnQueryCreditFundInfo(self,data: dict, error: dict,request: int, session_id:int):
+        if error is not None and error.get("error_id") is not None:
+            logging.getLogger("error").error(f"获取信用资产出错 {error.get('error_msg')} reqId:{request} sessionId:{session_id}")
+            return
+        account: AccountData = AccountData(
+            accountid=self.userid,
+            balance=0,
+            frozen=0,
+            total_asset=0,
+            buying_power=0,
+            withholding_amount=0,
+            fund_buy_amount=0,
+            all_asset=round(data["all_asset"], 2),
+            all_debt=round(data["all_debt"], 2),
+            guaranty=round(data["guaranty"], 2),
+            maintenance_ratio=round(data["maintenance_ratio"], 2),
+            line_of_credit=round(data["line_of_credit"], 2),
+            gateway_name=self.gateway_name,
+            asset_type='CREDIT'
+        )
         self.gateway.on_account(account)
 
     def onQueryOptionAuctionInfo(self, data: dict, error: dict, reqid: int, last: bool, session: int) -> None:
@@ -981,8 +1024,8 @@ class XtpTdApi(TdApi):
                 "quantity": int(req.volume),
                 "price_type": type_map[req.type],
             }
-
-            if self.margin_trading:
+            is_buy_with_rongzi = req.get_is_buy_with_rongzi()
+            if self.margin_trading and is_buy_with_rongzi is not None and is_buy_with_rongzi:
                 xtp_req["side"] = DIRECTION_STOCK_VT2XTP.get((req.direction, req.offset), "")
                 xtp_req["business_type"] = 4
             else:
@@ -1021,6 +1064,14 @@ class XtpTdApi(TdApi):
         if self.margin_trading:
             self.reqid += 1
             self.queryCreditDebtInfo(self.session_id, self.reqid)
+
+    def query_credit_asset(self):
+        if not self.connect_status:
+            return
+
+        if self.margin_trading:
+            self.reqid += 1
+            self.queryCreditFundInfo(self.session_id,self.reqid)
 
     def init_contract_data(self):
         contract_list = stock_meta_repository.get_all_contracts()
