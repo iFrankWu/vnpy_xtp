@@ -270,6 +270,12 @@ class XtpGateway(BaseGateway):
         """查询信用资产"""
         self.td_api.query_credit_asset()
 
+    def query_credit_debt(self) -> None:
+        """查询信用负债"""
+        self.td_api.query_credit_debt()
+
+
+
     def query_position(self) -> None:
         """查询持仓"""
         self.td_api.query_position()
@@ -714,6 +720,8 @@ class XtpTdApi(TdApi):
 
     def onTradeEvent(self, data: dict, session: int) -> None:
         """成交推送"""
+        # logging.getLogger().info(f"onTradeEvent:{data}")
+
         symbol: str = data["ticker"]
         if len(symbol) == 8:
             direction: Direction = DIRECTION_OPTION_XTP2VT[data["side"]]
@@ -751,9 +759,11 @@ class XtpTdApi(TdApi):
             self.gateway.write_log(f"成交找不到对应委托{trade.orderid}")
 
         self.gateway.on_trade(trade)
-        # 每次成交时 触发资产更新
-        self.query_account()
-        self.query_credit_asset()
+        if order.status in [Status.PARTTRADED,Status.ALLTRADED]:
+            # 每次成交时 触发资产更新
+            self.query_account()
+            self.query_credit_asset()
+
     def onCancelOrderError(self, data: dict, error: dict, session: int) -> None:
         """撤单报错"""
         if not error or not error["error_id"]:
@@ -795,6 +805,8 @@ class XtpTdApi(TdApi):
             session: int
     ) -> None:
         """查询资金回报"""
+        # logging.getLogger().info(f"onQueryAsset:{data}")
+
         account: AccountData = AccountData(
             accountid=self.userid,
             balance=round(data["total_asset"], 2),
@@ -823,10 +835,16 @@ class XtpTdApi(TdApi):
 
         self.gateway.on_account(account)
 
-    def OnQueryCreditFundInfo(self,data: dict, error: dict,request: int, session_id:int):
-        if error is not None and error.get("error_id") is not None:
-            logging.getLogger("error").error(f"获取信用资产出错 {error.get('error_msg')} reqId:{request} sessionId:{session_id}")
+    def onQueryCreditFundInfo(self, data: dict,
+            error: dict,
+            request: int,
+            session: int):
+        # logging.getLogger().info(f"onQueryCreditFundInfo:{data}")
+
+        if error is not None and error.get("error_id") is not None and len(error.get('error_msg')) > 1 :
+            logging.getLogger("error").error(f"获取信用资产出错 {error}  reqId:{request} session:{session}")
             return
+
         account: AccountData = AccountData(
             accountid=self.userid,
             balance=0,
@@ -892,6 +910,8 @@ class XtpTdApi(TdApi):
             session: int
     ) -> None:
         """查询两融持仓回报"""
+        # logging.getLogger().info(f"OnQueryCreditDebtInfo:{data}")
+
         if data["debt_type"] == 1:
             symbol: str = data["ticker"]
             exchange: Exchange = MARKET_XTP2VT[data["market"]]
@@ -1069,9 +1089,19 @@ class XtpTdApi(TdApi):
         if not self.connect_status:
             return
 
-        if self.margin_trading:
-            self.reqid += 1
-            self.queryCreditFundInfo(self.session_id,self.reqid)
+        # if self.margin_trading:
+        self.reqid += 1
+        # logging.getLogger().info(f"queryCreditFundInfo reqId:{self.reqid} ,session:{self.session_id}")
+        self.queryCreditFundInfo(self.session_id,self.reqid)
+
+    def query_credit_debt(self):
+        if not self.connect_status:
+            return
+
+        # if self.margin_trading:
+        self.reqid += 1
+        # logging.getLogger().info(f"query_credit_debt reqId:{self.reqid} ,session:{self.session_id}")
+        self.queryCreditDebtInfo(self.session_id, self.reqid)
 
     def init_contract_data(self):
         contract_list = stock_meta_repository.get_all_contracts()
