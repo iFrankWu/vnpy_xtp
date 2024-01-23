@@ -1044,10 +1044,16 @@ class XtpTdApi(TdApi):
                 "quantity": int(req.volume),
                 "price_type": type_map[req.type],
             }
-            is_buy_with_rongzi = req.get_is_buy_with_rongzi()
-            if self.margin_trading and is_buy_with_rongzi is not None and is_buy_with_rongzi:
-                xtp_req["side"] = DIRECTION_STOCK_VT2XTP.get((req.direction, req.offset), "")
-                xtp_req["business_type"] = 4
+            if self.margin_trading :
+                is_buy_with_rongzi = req.get_is_buy_with_rongzi()
+                if is_buy_with_rongzi is not None and is_buy_with_rongzi:
+                    xtp_req["side"] = DIRECTION_STOCK_VT2XTP.get((req.direction, req.offset), "")
+                    xtp_req["business_type"] = 4
+                else:
+                    # 信用户进行普通交易时，要使用担保品买、担保品卖，business_type = 4，Side = 28/29
+                    xtp_req["business_type"] = 4
+                    xtp_req["side"] = DIRECTION_STOCK_VT2XTP.get((req.direction, Offset.NONE), "")
+
             else:
                 xtp_req["side"] = DIRECTION_STOCK_VT2XTP.get((req.direction, Offset.NONE), "")
                 xtp_req["business_type"] = 0
