@@ -31,7 +31,7 @@ from vnpy.trader.object import (
 )
 from vnpy.trader.utility import get_folder_path, round_to, ZoneInfo, DateUtil
 
-from ..api import MdApi, TdApi
+from ..api import MdApi, TdApi, XTP_EXCHANGE_UNKNOWN
 
 # 交易所映射
 MARKET_XTP2VT: Dict[int, Exchange] = {
@@ -344,6 +344,8 @@ class XtpMdApi(MdApi):
         self.last_tick_time : dict = {}
 
         self.re_connect_times = 0
+        # 是否订阅全市场的tick 默认是false
+        self.subscribe_all = False
 
     def onDisconnected(self, reason: int) -> None:
         """服务器连接断开回报"""
@@ -399,7 +401,7 @@ class XtpMdApi(MdApi):
                 logging.getLogger().info(f'ignore received early tick:{vt_symbol},{dt}, already processed tick : {last_tick_time}')
                 return
 
-        if not self.__is_sub_symbol(data["ticker"]):
+        if not self.subscribe_all and not self.__is_sub_symbol(data["ticker"]):
            logging.getLogger("error").error(
                f'received tick not our subscribed:{data["ticker"]},{dt},clientId:{self.client_id} {data["last_price"]},subscribed:{self.subscribe_request_list}')
            return
@@ -562,6 +564,14 @@ class XtpMdApi(MdApi):
             ele = req.symbol, req.exchange
             # 仅在系统初始化的时候 添加值 其他时候不添加
             self.subscribe_request_list.add(ele)
+
+    def subscribe_all_tickets(self) -> None:
+        """订阅行情"""
+        if self.login_status:
+            #exchange_id：表示当前全订阅的市场，如果为XTP_EXCHANGE_UNKNOWN，表示沪深全市场（不包括新三板），XTP_EXCHANGE_SH表示为上海全市场，XTP_EXCHANGE_SZ表示为深圳全市场，XTP_EXCHANGE_NQ表示新三板
+            self.subscribeAllMarketData(XTP_EXCHANGE_UNKNOWN)
+            logging.getLogger().info(f'订阅全市场行情 xtp_exchange:{XTP_EXCHANGE_UNKNOWN},client_id:{self.client_id}')
+
 
     def query_last_price(self,symbol,exchange,cnt):
         xtp_exchange: int = EXCHANGE_VT2XTP.get(exchange, "")
