@@ -254,6 +254,10 @@ class XtpGateway(BaseGateway):
         """订阅行情"""
         self.md_api.subscribe(req)
 
+    def subscribe_all_tickets(self) -> None:
+        """订阅行情"""
+        self.md_api.subscribe_all_tickets()
+
     def send_order(self, req: OrderRequest) -> str:
         """委托下单"""
         return self.td_api.send_order(req)
@@ -571,7 +575,7 @@ class XtpMdApi(MdApi):
             #exchange_id：表示当前全订阅的市场，如果为XTP_EXCHANGE_UNKNOWN，表示沪深全市场（不包括新三板），XTP_EXCHANGE_SH表示为上海全市场，XTP_EXCHANGE_SZ表示为深圳全市场，XTP_EXCHANGE_NQ表示新三板
             self.subscribeAllMarketData(XTP_EXCHANGE_UNKNOWN)
             logging.getLogger().info(f'订阅全市场行情 xtp_exchange:{XTP_EXCHANGE_UNKNOWN},client_id:{self.client_id}')
-
+            self.subscribe_all = True
 
     def query_last_price(self,symbol,exchange,cnt):
         xtp_exchange: int = EXCHANGE_VT2XTP.get(exchange, "")
