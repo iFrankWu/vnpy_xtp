@@ -407,11 +407,11 @@ class XtpMdApi(MdApi):
 
         if not self.subscribe_all and not self.__is_sub_symbol(data["ticker"]):
            logging.getLogger("error").error(
-               f'received tick not our subscribed:{data["ticker"]},{dt},clientId:{self.client_id} {data["last_price"]},subscribed:{self.subscribe_request_list}')
+               f'received tick not our subscribed:{vt_symbol},{dt},clientId:{self.client_id} {data["last_price"]},subscribed:{self.subscribe_request_list}')
            return
 
         logging.getLogger().info(
-           f'received tick:{data["ticker"]},{dt},{data["open_price"]},{data["high_price"]},{data["low_price"]},{data["last_price"]}')
+           f'received tick:{vt_symbol},{dt},{data["open_price"]},{data["high_price"]},{data["low_price"]},{data["last_price"]}')
 
 
         tick: TickData = TickData(
@@ -522,7 +522,7 @@ class XtpMdApi(MdApi):
 
             if quote_protocol == 'UDP':
                 #如果连接的是UDP行情服务器，无论是否订阅，都是行情全接收后再本地Api筛选过滤
-                self.setUDPBufferSize(512)
+                self.setUDPBufferSize(2048)
                 # 设定是否输出异步日志 灰度期间打开 生成时关闭
                 # self.setUDPSeqLogOutPutFlag(True)
 
