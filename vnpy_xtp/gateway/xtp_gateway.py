@@ -522,7 +522,13 @@ class XtpMdApi(MdApi):
 
             if quote_protocol == 'UDP':
                 #如果连接的是UDP行情服务器，无论是否订阅，都是行情全接收后再本地Api筛选过滤
-                self.setUDPBufferSize(2048)
+                 ##[15:05:04.868.840][3664962][INFO][XTP:0]Begin to init UDP session 230.1.53.91:7773, buffer frame size is -2147483648..
+                # [15:05:04.868.868][3664962][INFO][XTP:0]group ip: 230.1.53.91, group port: 7773 local ip: 10.36.178.95 local port:7773 bind: 1
+                # [15:05:04.868.922][3664962][INFO][XTP:0]UDP recv buf size: 425984
+                # [15:05:04.868.928][3664962][INFO][XTP:0]UDP send buf size: 425984
+                # [15:05:04.869.344][3664962][ERROR][XTP:10200104]Alloc UDP session error.[OS:12]Cannot allocate memory[xapi_udp_connect.cpp:47]
+                self.setUDPBufferSize(1024)
+
                 # 设定是否输出异步日志 灰度期间打开 生成时关闭
                 # self.setUDPSeqLogOutPutFlag(True)
 
