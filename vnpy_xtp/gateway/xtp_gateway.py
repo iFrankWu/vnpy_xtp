@@ -232,17 +232,18 @@ class XtpGateway(BaseGateway):
         quote_protocol: str = setting["行情协议"]
         log_level: int = LOGLEVEL_VT2XTP[setting["日志级别"]]
         software_key: str = setting["授权码"]
+        local_ip: str = setting["local_ip"]
         if quote_ip is not None:
             quote_port: int = int(setting.get("行情端口"))
             self.md_api.connect(
                 userid, password, client_id, quote_ip,
-                quote_port, quote_protocol, log_level
+                quote_port, quote_protocol, log_level,local_ip
             )
         if trader_ip is not None:
             trader_port: int = int(setting.get("交易端口"))
             self.td_api.connect(
                 userid, password, client_id, trader_ip,
-                trader_port, software_key, log_level
+                trader_port, software_key, log_level,local_ip
             )
             self.init_query()
 
@@ -350,6 +351,9 @@ class XtpMdApi(MdApi):
         self.re_connect_times = 0
         # 是否订阅全市场的tick 默认是false
         self.subscribe_all = False
+
+        self.local_ip = "127.0.0.1"
+
 
     def onDisconnected(self, reason: int) -> None:
         """服务器连接断开回报"""
@@ -504,7 +508,8 @@ class XtpMdApi(MdApi):
             server_ip: str,
             server_port: int,
             quote_protocol: int,
-            log_level: int
+            log_level: int,
+            local_ip: str
     ) -> None:
         """连接服务器"""
         self.userid = userid
@@ -513,6 +518,7 @@ class XtpMdApi(MdApi):
         self.server_ip = server_ip
         self.server_port = server_port
         self.protocol = PROTOCOL_VT2XTP[quote_protocol]
+        self.local_ip = local_ip
 
         if not self.connect_status:
             path: str = str(get_folder_path(self.gateway_name.lower())).encode("GBK")
@@ -544,7 +550,7 @@ class XtpMdApi(MdApi):
             self.userid,
             self.password,
             self.protocol,
-            ""
+            self.local_ip
         )
 
         if not n:
@@ -667,6 +673,7 @@ class XtpTdApi(TdApi):
         self.session_id: int = 0
         self.reqid: int = 0
         self.protocol: int = 0
+        self.local_ip = "127.0.0.1"
 
         # 账户是否支持两融或者期权交易
         self.margin_trading = False
@@ -962,7 +969,8 @@ class XtpTdApi(TdApi):
             server_ip: str,
             server_port: int,
             software_key: str,
-            log_level: int
+            log_level: int,
+            local_ip:str
     ) -> None:
         """连接服务器"""
 
@@ -973,6 +981,7 @@ class XtpTdApi(TdApi):
         self.server_port = server_port
         self.software_key = software_key
         self.protocol = PROTOCOL_VT2XTP["TCP"]
+        self.local_ip = local_ip
 
         if not self.connect_status:
             path: str = str(get_folder_path(self.gateway_name.lower())).encode("GBK")
