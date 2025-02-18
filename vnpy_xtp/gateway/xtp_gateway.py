@@ -621,10 +621,10 @@ class XtpMdApi(MdApi):
                     f'登录状态非法 不能重新订阅:clientId：{self.client_id} size：{len(self.subscribe_request_list)}')
                 return
             #"TCP": 1, "UDP": 2
-            if self.protocol == 2:
-                logging.getLogger().info(
-                    f'当前协议为UDP {self.protocol} (tcp:1,udp:2) 不需要重新订阅,clientId：{self.client_id} size：{len(self.subscribe_request_list)}')
-                return
+            # if self.protocol == 2:
+            #     logging.getLogger().info(
+            #         f'当前协议为UDP {self.protocol} (tcp:1,udp:2) 不需要重新订阅,clientId：{self.client_id} size：{len(self.subscribe_request_list)}')
+            #     return
 
             sub_list_clone = self.subscribe_request_list
             # 1. 重新订阅之前 先取消订阅
