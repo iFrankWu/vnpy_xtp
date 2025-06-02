@@ -320,6 +320,9 @@ class XtpGateway(BaseGateway):
         cnt = 1
         self.md_api.query_last_price(symbol,exchange,cnt)
 
+    def query_local_latest_tick_time(self, vt_symbol):
+        self.md_api.query_local_latest_tick_time(vt_symbol)
+
 
 class XtpMdApi(MdApi):
 
@@ -652,6 +655,9 @@ class XtpMdApi(MdApi):
         """查询合约信息"""
         for exchange_id in EXCHANGE_XTP2VT.keys():
             self.queryAllTickers(exchange_id)
+
+    def query_local_latest_tick_time(self,vt_symbol):
+        return self.last_tick_time.get(vt_symbol)
 
 
 class XtpTdApi(TdApi):
