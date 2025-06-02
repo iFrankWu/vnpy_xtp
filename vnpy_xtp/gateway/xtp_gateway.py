@@ -321,7 +321,7 @@ class XtpGateway(BaseGateway):
         self.md_api.query_last_price(symbol,exchange,cnt)
 
     def query_local_latest_tick_time(self, vt_symbol):
-        self.md_api.query_local_latest_tick_time(vt_symbol)
+        return self.md_api.query_local_latest_tick_time(vt_symbol)
 
 
 class XtpMdApi(MdApi):
