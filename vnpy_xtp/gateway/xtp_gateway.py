@@ -691,6 +691,9 @@ class XtpTdApi(TdApi):
         self.short_positions: Dict[str, PositionData] = {}
         self.orders: Dict[str, OrderData] = {}
 
+        self.max_retry_login_times = 3600 # 每 3 秒一次，3600次，一共 3个小时
+        self.retry_login_times = 3600 # 每 3 秒一次，3600次，一共 3个小时
+
     def onDisconnected(self, session: int, reason: int) -> None:
         """服务器连接断开回报"""
         self.connect_status = False
@@ -1019,6 +1022,11 @@ class XtpTdApi(TdApi):
         else:
             error: dict = self.getApiLastError()
             msg: str = f"交易服务器登录失败，原因：{error['error_msg']}"
+
+            if self.retry_login_times < self.max_retry_login_times:
+                sleep(3)
+                self.gateway.write_log(f"登录失败 3秒后重试 已重试次数{self.retry_login_times} 最多不超过 {self.max_retry_login_times}")
+                self.login_server()
 
         self.gateway.write_log(msg)
         self.query_option_info()
