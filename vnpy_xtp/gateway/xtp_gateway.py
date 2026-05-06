@@ -26,9 +26,10 @@ from vnpy.trader.object import (
     ContractData,
     OrderData,
     TradeData,
-    PositionData,
     AccountData
 )
+from lpc_common.trader.position_data import PositionData
+
 from vnpy.trader.utility import get_folder_path, round_to, ZoneInfo, DateUtil
 
 from ..api import MdApi, TdApi, XTP_EXCHANGE_UNKNOWN
@@ -163,6 +164,9 @@ CHINA_TZ = ZoneInfo("Asia/Shanghai")  # 中国时区
 
 # 合约数据全局缓存字典
 symbol_contract_map: Dict[str, ContractData] = {}
+# 股票名称缓存，用于开盘后识别最新ST股票
+stock_name_map: Dict[str, str] = {}
+st_stock_contract_map: Dict[str, ContractData] = {}
 # Chinese futures market trading period (day/night)
 AM_START = time(9, 30)
 AM_END = time(11, 30)
@@ -178,6 +182,16 @@ def is_curr_trade_time() -> datetime:
             or (PM_START <= current_time <= PM_END)):
         trading = True
     return trading
+
+
+def is_st_stock_name(name: str) -> bool:
+    """判断股票名称是否带ST标识。"""
+    if not name:
+        return False
+
+    normalized_name = name.strip().upper()
+    st_prefixes = ("ST", "*ST", "S*ST", "SST")
+    return normalized_name.startswith(st_prefixes)
 
 
 class XtpGateway(BaseGateway):
@@ -322,6 +336,18 @@ class XtpGateway(BaseGateway):
 
     def query_local_latest_tick_time(self, vt_symbol):
         return self.md_api.query_local_latest_tick_time(vt_symbol)
+
+    def query_stock_names(self) -> None:
+        """查询沪深股票名称。"""
+        self.md_api.query_contract()
+
+    def get_stock_names(self) -> Dict[str, str]:
+        """获取已查询到的股票名称。"""
+        return stock_name_map.copy()
+
+    def get_st_stock_contracts(self) -> List[ContractData]:
+        """获取已识别的ST股票合约。"""
+        return list(st_stock_contract_map.values())
 
 
 class XtpMdApi(MdApi):
@@ -475,9 +501,10 @@ class XtpMdApi(MdApi):
 
     def onQueryAllTickers(self, data: dict, error: dict, last: bool) -> None:
         """查询合约回报"""
+        exchange = EXCHANGE_XTP2VT[data["exchange_id"]]
         contract: ContractData = ContractData(
             symbol=data["ticker"],
-            exchange=EXCHANGE_XTP2VT[data["exchange_id"]],
+            exchange=exchange,
             name=data["ticker_name"],
             product=PRODUCT_XTP2VT[data["ticker_type"]],
             size=1,
@@ -486,15 +513,19 @@ class XtpMdApi(MdApi):
             gateway_name=self.gateway_name
         )
 
-        if contract.product != Product.OPTION:
+        if contract.product == Product.EQUITY:
             self.gateway.on_contract(contract)
-
-        symbol_contract_map[contract.vt_symbol] = contract
+            symbol_contract_map[contract.vt_symbol] = contract
+            stock_name_map[contract.vt_symbol] = contract.name
+            if is_st_stock_name(contract.name):
+                st_stock_contract_map[contract.vt_symbol] = contract
+            else:
+                st_stock_contract_map.pop(contract.vt_symbol, None)
 
         if last:
-            self.gateway.write_log(f"{contract.exchange.value}合约信息查询成功")
+            self.gateway.write_log(f"{exchange.value}股票合约信息查询成功")
 
-            if contract.exchange == Exchange.SSE:
+            if exchange == Exchange.SSE:
                 self.sse_inited = True
             else:
                 self.szse_inited = True
@@ -502,6 +533,15 @@ class XtpMdApi(MdApi):
             # # 如果上海和深圳都查询完成后，再查询期权的信息
             # if self.sse_inited and self.szse_inited:
             #     self.gateway.td_api.query_option_info()
+
+            if self.sse_inited and self.szse_inited:
+                st_stocks = sorted(
+                    f"{contract.vt_symbol}:{contract.name}"
+                    for contract in st_stock_contract_map.values()
+                )
+                self.gateway.write_log(
+                    f"ST股票列表更新完成，共{len(st_stocks)}只：{', '.join(st_stocks)}"
+                )
 
     def connect(
             self,
@@ -653,6 +693,8 @@ class XtpMdApi(MdApi):
 
     def query_contract(self) -> None:
         """查询合约信息"""
+        self.sse_inited = False
+        self.szse_inited = False
         for exchange_id in EXCHANGE_XTP2VT.keys():
             self.queryAllTickers(exchange_id)
 
