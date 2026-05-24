@@ -10,9 +10,9 @@ int MdApi::queryTickersPriceInfo(char ticker, int count, int exchange_id)
 	return i;
 };
 
-int MdApi::queryAllTickersPriceInfo()
+int MdApi::queryAllTickersPriceInfo(int exchange_id)
 {
-	int i = this->api->QueryAllTickersPriceInfo();
+	int i = this->api->QueryAllTickersPriceInfo((XTP_EXCHANGE_TYPE)exchange_id);
 	return i;
 };
 

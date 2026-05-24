@@ -36,6 +36,9 @@ __pycache__/
 .vs/
 x64/
 
+# IDE
+.idea/
+
 dist/
 build/
 .egg-info/

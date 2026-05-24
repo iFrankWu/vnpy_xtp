@@ -382,78 +382,6 @@ void MdApi::OnQueryTickersPriceInfo(XTPTPI* ticker_info, XTPRI *error_info, bool
 	this->onQueryTickersPriceInfo(data, error, is_last);
 };
 
-void MdApi::OnSubscribeAllOptionMarketData(XTP_EXCHANGE_TYPE exchange_id, XTPRI *error_info)
-{
-	gil_scoped_acquire acquire;
-	dict error;
-	if (error_info)
-	{
-		error["error_id"] = error_info->error_id;
-		error["error_msg"] = error_info->error_msg;
-	}
-	this->onSubscribeAllOptionMarketData(exchange_id, error);
-};
-
-void MdApi::OnUnSubscribeAllOptionMarketData(XTP_EXCHANGE_TYPE exchange_id, XTPRI *error_info)
-{
-	gil_scoped_acquire acquire;
-	dict error;
-	if (error_info)
-	{
-		error["error_id"] = error_info->error_id;
-		error["error_msg"] = error_info->error_msg;
-	}
-	this->onUnSubscribeAllOptionMarketData(exchange_id, error);
-};
-
-void MdApi::OnSubscribeAllOptionOrderBook(XTP_EXCHANGE_TYPE exchange_id, XTPRI *error_info)
-{
-	gil_scoped_acquire acquire;
-	dict error;
-	if (error_info)
-	{
-		error["error_id"] = error_info->error_id;
-		error["error_msg"] = error_info->error_msg;
-	}
-	this->onSubscribeAllOptionOrderBook(exchange_id, error);
-};
-
-void MdApi::OnUnSubscribeAllOptionOrderBook(XTP_EXCHANGE_TYPE exchange_id, XTPRI *error_info)
-{
-	gil_scoped_acquire acquire;
-	dict error;
-	if (error_info)
-	{
-		error["error_id"] = error_info->error_id;
-		error["error_msg"] = error_info->error_msg;
-	}
-	this->onUnSubscribeAllOptionOrderBook(exchange_id, error);
-};
-
-void MdApi::OnSubscribeAllOptionTickByTick(XTP_EXCHANGE_TYPE exchange_id, XTPRI *error_info)
-{
-	gil_scoped_acquire acquire;
-	dict error;
-	if (error_info)
-	{
-		error["error_id"] = error_info->error_id;
-		error["error_msg"] = error_info->error_msg;
-	}
-	this->onSubscribeAllOptionTickByTick(exchange_id, error);
-};
-
-void MdApi::OnUnSubscribeAllOptionTickByTick(XTP_EXCHANGE_TYPE exchange_id, XTPRI *error_info)
-{
-	gil_scoped_acquire acquire;
-	dict error;
-	if (error_info)
-	{
-		error["error_id"] = error_info->error_id;
-		error["error_msg"] = error_info->error_msg;
-	}
-	this->onUnSubscribeAllOptionTickByTick(exchange_id, error);
-};
-
 void MdApi::OnQueryAllTickersFullInfo(XTPQFI* ticker_info, XTPRI *error_info, bool is_last)
 {
 	gil_scoped_acquire acquire;
@@ -504,11 +432,11 @@ void MdApi::OnQueryAllTickersFullInfo(XTPQFI* ticker_info, XTPRI *error_info, bo
 ///主动函数
 ///-------------------------------------------------------------------------------------
 
-void MdApi::createQuoteApi(int client_id, string save_file_path, int log_level)
+void MdApi::createQuoteApi(int client_id, string save_file_path, int log_level, bool udpseq_output)
 {
 	if (!this->api)
 	{
-		this->api = QuoteApi::CreateQuoteApi(client_id, save_file_path.c_str(), XTP_LOG_LEVEL(log_level));
+		this->api = QuoteApi::CreateQuoteApi(client_id, save_file_path.c_str(), XTP_LOG_LEVEL(log_level), udpseq_output);
 		this->api->RegisterSpi(this);
 	}
 };
@@ -536,16 +464,15 @@ int MdApi::exit()
 	return 1;
 };
 
-string MdApi::getTradingDay()
-{
-	string day = this->api->GetTradingDay();
-	return day;
-};
-
 string MdApi::getApiVersion()
 {
 	string version = this->api->GetApiVersion();
 	return version;
+};
+
+bool MdApi::setConfigFile(string filename)
+{
+	return this->api->SetConfigFile(filename.c_str());
 };
 
 dict MdApi::getApiLastError()
@@ -555,11 +482,6 @@ dict MdApi::getApiLastError()
 	error["error_id"] = last_error->error_id;
 	error["error_msg"] = last_error->error_msg;
 	return error;
-};
-
-void MdApi::setUDPBufferSize(int buff_size)
-{
-	this->api->SetUDPBufferSize(buff_size);
 };
 
 void MdApi::setHeartBeatInterval(int interval)
@@ -688,9 +610,9 @@ int MdApi::queryTickersPriceInfo(string ticker, int count, int exchange_id)
 	return i;
 };
 
-int MdApi::queryAllTickersPriceInfo()
+int MdApi::queryAllTickersPriceInfo(int exchange_id)
 {
-	int i = this->api->QueryAllTickersPriceInfo();
+	int i = this->api->QueryAllTickersPriceInfo((XTP_EXCHANGE_TYPE)exchange_id);
 	return i;
 };
 
@@ -940,78 +862,6 @@ public:
 		}
 	};
 
-	void onSubscribeAllOptionMarketData(int exchange_id, const dict &error) override
-	{
-		try
-		{
-			PYBIND11_OVERLOAD(void, MdApi, onSubscribeAllOptionMarketData, exchange_id, error);
-		}
-		catch (const error_already_set &e)
-		{
-			cout << e.what() << endl;
-		}
-	};
-
-	void onUnSubscribeAllOptionMarketData(int exchange_id, const dict &error) override
-	{
-		try
-		{
-			PYBIND11_OVERLOAD(void, MdApi, onUnSubscribeAllOptionMarketData, exchange_id, error);
-		}
-		catch (const error_already_set &e)
-		{
-			cout << e.what() << endl;
-		}
-	};
-
-	void onSubscribeAllOptionOrderBook(int exchange_id, const dict &error) override
-	{
-		try
-		{
-			PYBIND11_OVERLOAD(void, MdApi, onSubscribeAllOptionOrderBook, exchange_id, error);
-		}
-		catch (const error_already_set &e)
-		{
-			cout << e.what() << endl;
-		}
-	};
-
-	void onUnSubscribeAllOptionOrderBook(int exchange_id, const dict &error) override
-	{
-		try
-		{
-			PYBIND11_OVERLOAD(void, MdApi, onUnSubscribeAllOptionOrderBook, exchange_id, error);
-		}
-		catch (const error_already_set &e)
-		{
-			cout << e.what() << endl;
-		}
-	};
-
-	void onSubscribeAllOptionTickByTick(int exchange_id, const dict &error) override
-	{
-		try
-		{
-			PYBIND11_OVERLOAD(void, MdApi, onSubscribeAllOptionTickByTick, exchange_id, error);
-		}
-		catch (const error_already_set &e)
-		{
-			cout << e.what() << endl;
-		}
-	};
-
-	void onUnSubscribeAllOptionTickByTick(int exchange_id, const dict &error) override
-	{
-		try
-		{
-			PYBIND11_OVERLOAD(void, MdApi, onUnSubscribeAllOptionTickByTick, exchange_id, error);
-		}
-		catch (const error_already_set &e)
-		{
-			cout << e.what() << endl;
-		}
-	};
-
 	void onQueryAllTickersFullInfo(const dict &data, const dict &error, bool is_last) override
 	{
 		try
@@ -1035,10 +885,9 @@ PYBIND11_MODULE(vnxtpmd, m)
 		.def("init", &MdApi::init)
 		.def("release", &MdApi::release)
 		.def("exit", &MdApi::exit)
-		.def("getTradingDay", &MdApi::getTradingDay)
 		.def("getApiVersion", &MdApi::getApiVersion)
 		.def("getApiLastError", &MdApi::getApiLastError)
-		.def("setUDPBufferSize", &MdApi::setUDPBufferSize)
+		.def("setConfigFile", &MdApi::setConfigFile)
 		.def("setHeartBeatInterval", &MdApi::setHeartBeatInterval)
 		.def("subscribeMarketData", &MdApi::subscribeMarketData)
 		.def("unSubscribeMarketData", &MdApi::unSubscribeMarketData)
@@ -1079,12 +928,6 @@ PYBIND11_MODULE(vnxtpmd, m)
 		.def("onUnSubscribeAllTickByTick", &MdApi::onUnSubscribeAllTickByTick)
 		.def("onQueryAllTickers", &MdApi::onQueryAllTickers)
 		.def("onQueryTickersPriceInfo", &MdApi::onQueryTickersPriceInfo)
-		.def("onSubscribeAllOptionMarketData", &MdApi::onSubscribeAllOptionMarketData)
-		.def("onUnSubscribeAllOptionMarketData", &MdApi::onUnSubscribeAllOptionMarketData)
-		.def("onSubscribeAllOptionOrderBook", &MdApi::onSubscribeAllOptionOrderBook)
-		.def("onUnSubscribeAllOptionOrderBook", &MdApi::onUnSubscribeAllOptionOrderBook)
-		.def("onSubscribeAllOptionTickByTick", &MdApi::onSubscribeAllOptionTickByTick)
-		.def("onUnSubscribeAllOptionTickByTick", &MdApi::onUnSubscribeAllOptionTickByTick)
 		.def("onQueryAllTickersFullInfo", &MdApi::onQueryAllTickersFullInfo)
 		;
 }

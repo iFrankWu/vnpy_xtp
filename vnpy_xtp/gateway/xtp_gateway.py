@@ -222,7 +222,9 @@ class XtpGateway(BaseGateway):
         "交易端口": 0,
         "行情协议": ["TCP", "UDP"],
         "日志级别": ["FATAL", "ERROR", "WARNING", "INFO", "DEBUG", "TRACE"],
-        "授权码": ""
+        "授权码": "",
+        "local_ip": "",
+        "行情配置文件": "",
     }
 
     exchanges: List[Exchange] = list(EXCHANGE_VT2XTP.keys())
@@ -245,15 +247,17 @@ class XtpGateway(BaseGateway):
 
         quote_protocol: str = setting["行情协议"]
         log_level: int = LOGLEVEL_VT2XTP[setting["日志级别"]]
-        software_key: str = setting["授权码"]
-        local_ip: str = setting["local_ip"]
+        local_ip: str = setting.get("local_ip", "")
+        quote_config_file: str = setting.get("行情配置文件", "")
         if quote_ip is not None:
             quote_port: int = int(setting.get("行情端口"))
             self.md_api.connect(
                 userid, password, client_id, quote_ip,
-                quote_port, quote_protocol, log_level,local_ip
+                quote_port, quote_protocol, log_level, local_ip,
+                quote_config_file
             )
         if trader_ip is not None:
+            software_key: str = setting.get("授权码", "")
             trader_port: int = int(setting.get("交易端口"))
             self.td_api.connect(
                 userid, password, client_id, trader_ip,
@@ -382,6 +386,37 @@ class XtpMdApi(MdApi):
         self.subscribe_all = False
 
         self.local_ip = "127.0.0.1"
+        self.quote_config_file = ""
+
+    def _generate_quote_config(self, local_ip: str) -> str:
+        """生成 XTP Pro UDP 行情配置文件。"""
+        config_dir = get_folder_path(self.gateway_name.lower())
+        config_path = config_dir.joinpath("quote_config.ini")
+        content = f"""[md]
+decode_flag = 1
+parse_cpu_id = 0
+
+[md.normal]
+enable = ON
+local_ip = {local_ip}
+recv_cpu_id = 0
+enable_efvi = OFF
+L1_buf_capacity = 256
+L2_buf_capacity = 8
+
+[md.fpga]
+enable = OFF
+local_ip = {local_ip}
+recv_cpu_id = 0
+L1_buf_capacity = 256
+L2_buf_capacity = 8
+
+[subscribe_quote_type]
+sh_level2_md_stock = ON
+sz_level2_md_stock = ON
+"""
+        config_path.write_text(content, encoding="utf-8")
+        return str(config_path)
 
 
     def onDisconnected(self, reason: int) -> None:
@@ -552,7 +587,8 @@ class XtpMdApi(MdApi):
             server_port: int,
             quote_protocol: int,
             log_level: int,
-            local_ip: str
+            local_ip: str,
+            quote_config_file: str = ""
     ) -> None:
         """连接服务器"""
         self.userid = userid
@@ -561,25 +597,21 @@ class XtpMdApi(MdApi):
         self.server_ip = server_ip
         self.server_port = server_port
         self.protocol = PROTOCOL_VT2XTP[quote_protocol]
-        self.local_ip = local_ip
+        self.local_ip = local_ip or "127.0.0.1"
+        self.quote_config_file = quote_config_file
 
         if not self.connect_status:
             path: str = str(get_folder_path(self.gateway_name.lower())).encode("GBK")
-            self.createQuoteApi(self.client_id, path, log_level)
+            self.createQuoteApi(self.client_id, path, log_level, False)
             #超时时间设置为30s
             self.setHeartBeatInterval(30)
 
             if quote_protocol == 'UDP':
-                #如果连接的是UDP行情服务器，无论是否订阅，都是行情全接收后再本地Api筛选过滤
-                 ##[15:05:04.868.840][3664962][INFO][XTP:0]Begin to init UDP session 230.1.53.91:7773, buffer frame size is -2147483648..
-                # [15:05:04.868.868][3664962][INFO][XTP:0]group ip: 230.1.53.91, group port: 7773 local ip: 10.36.178.95 local port:7773 bind: 1
-                # [15:05:04.868.922][3664962][INFO][XTP:0]UDP recv buf size: 425984
-                # [15:05:04.868.928][3664962][INFO][XTP:0]UDP send buf size: 425984
-                # [15:05:04.869.344][3664962][ERROR][XTP:10200104]Alloc UDP session error.[OS:12]Cannot allocate memory[xapi_udp_connect.cpp:47]
-                self.setUDPBufferSize(1024)
-
-                # 设定是否输出异步日志 灰度期间打开 生成时关闭
-                # self.setUDPSeqLogOutPutFlag(True)
+                config_path = self.quote_config_file or self._generate_quote_config(self.local_ip)
+                if not self.setConfigFile(config_path):
+                    self.gateway.write_log(f"行情配置文件设置失败: {config_path}")
+                else:
+                    self.gateway.write_log(f"行情配置文件已加载: {config_path}")
 
             self.login_server()
         else:
@@ -643,9 +675,9 @@ class XtpMdApi(MdApi):
         # vt_symbol = f"{symbol}.{exchange.value}"
         logging.getLogger().info(f'response onQueryTickersPriceInfo :{data} {is_last}')
 
-    def query_all_last_price(self,  exchange):
+    def query_all_last_price(self, exchange):
         xtp_exchange: int = EXCHANGE_VT2XTP.get(exchange, "")
-        self.queryAllTickersFullInfo(xtp_exchange)
+        self.queryAllTickersPriceInfo(xtp_exchange)
 
     def onQueryAllTickersPriceInfo(self, data: dict, error:dict, is_last:bool) -> None:
         logging.getLogger().info(f'response onQueryAllTickersPriceInfo:{data} {is_last}')

@@ -1,6 +1,19 @@
 import platform
+from pathlib import Path
 
 from setuptools import Extension, setup
+
+
+def _has_trader_lib() -> bool:
+    """交易库存在时才编译 vnxtptd。"""
+    libs_dir = Path(__file__).parent / "vnpy_xtp" / "api" / "libs"
+    api_dir = Path(__file__).parent / "vnpy_xtp" / "api"
+    if platform.system() == "Windows":
+        return (libs_dir / "xtptraderapi.lib").exists()
+    return (
+        (libs_dir / "libxtptraderapi.so").exists()
+        or (api_dir / "libxtptraderapi.so").exists()
+    )
 
 
 def get_ext_modules() -> list:
@@ -37,7 +50,7 @@ def get_ext_modules() -> list:
         define_macros=[],
         undef_macros=[],
         library_dirs=["vnpy_xtp/api/libs", "vnpy_xtp/api"],
-        libraries=["xtpquoteapi", "xtptraderapi"],
+        libraries=["xtpxquoteapi"],
         extra_compile_args=extra_compile_flags,
         extra_link_args=extra_link_args,
         runtime_library_dirs=runtime_library_dirs,
@@ -55,7 +68,7 @@ def get_ext_modules() -> list:
         define_macros=[],
         undef_macros=[],
         library_dirs=["vnpy_xtp/api/libs", "vnpy_xtp/api"],
-        libraries=["xtpquoteapi", "xtptraderapi"],
+        libraries=["xtptraderapi"],
         extra_compile_args=extra_compile_flags,
         extra_link_args=extra_link_args,
         runtime_library_dirs=runtime_library_dirs,
@@ -63,7 +76,10 @@ def get_ext_modules() -> list:
         language="cpp",
     )
 
-    return [vnxtptd, vnxtpmd]
+    exts = [vnxtpmd]
+    if _has_trader_lib():
+        exts.append(vnxtptd)
+    return exts
 
 
 setup(
